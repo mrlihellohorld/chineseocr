@@ -1,0 +1,102 @@
+# ARM64/aarch64 Dockerfile for PyTorch installation
+FROM arm64v8/ubuntu:20.04
+
+MAINTAINER "ARM PyTorch Container"
+LABEL version="1.0"
+LABEL architecture="aarch64"
+
+# 设置时区，避免交互式安装时的提示
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Shanghai
+
+EXPOSE 8080
+
+# 添加deadsnakes PPA以获取Python 3.10
+RUN apt-get update && apt-get install -y software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update
+
+# 更新包管理器并安装必要的系统依赖
+RUN apt-get install -y \
+    libsm6 \
+    libxrender1 \
+    libxext-dev \
+    gcc \
+    g++ \
+    python3.10 \
+    python3.10-pip \
+    python3.10-dev \
+    python3.10-distutils \
+    wget \
+    curl \
+    git \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libgtk-3-0 \
+    libgobject-2.0-0 \
+    libgthread-2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置Python 3.10为默认python3
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
+RUN update-alternatives --install /usr/bin/pip3 pip3 /usr/bin/pip3.10 1
+
+# 创建工作目录
+WORKDIR /chineseocr
+
+# 复制项目文件
+ADD . /chineseocr
+
+# 升级pip并设置国内镜像源
+RUN python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple/
+
+# 首先安装基础依赖
+RUN pip3 install \
+    scipy \
+    numpy \
+    jupyter \
+    ipython \
+    easydict \
+    Cython \
+    h5py \
+    lmdb \
+    mahotas \
+    pandas \
+    requests \
+    pika \
+    matplotlib \
+    lxml \
+    beautifulsoup4 \
+    web.py==0.40.dev0 \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple/
+
+# 安装OpenCV（ARM版本）
+RUN pip3 install opencv-contrib-python -i https://pypi.tuna.tsinghua.edu.cn/simple/
+
+# 安装Pillow
+RUN pip3 install Pillow -i https://pypi.tuna.tsinghua.edu.cn/simple/
+
+# 复制并安装ARM版本的PyTorch wheels
+# 注意：这些文件需要在构建上下文中
+COPY torch-2.3.0-cp310-cp310-linux_aarch64.whl /tmp/
+COPY torchaudio-2.3.0+952ea74-cp310-cp310-linux_aarch64.whl /tmp/
+COPY torchvision-0.18.0a0+6043bc2-cp310-cp310-linux_aarch64.whl /tmp/
+
+# 安装PyTorch相关包
+RUN pip3 install /tmp/torch-2.3.0-cp310-cp310-linux_aarch64.whl
+RUN pip3 install /tmp/torchvision-0.18.0a0+6043bc2-cp310-cp310-linux_aarch64.whl
+RUN pip3 install /tmp/torchaudio-2.3.0+952ea74-cp310-cp310-linux_aarch64.whl
+
+# 清理临时文件
+RUN rm -f /tmp/*.whl
+
+# 验证PyTorch安装
+RUN python3 -c "import torch; print(f'PyTorch version: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')"
+RUN python3 -c "import torchvision; print(f'TorchVision version: {torchvision.__version__}')"
+RUN python3 -c "import torchaudio; print(f'TorchAudio version: {torchaudio.__version__}')"
+
+# 设置Python路径
+ENV PYTHONPATH=/chineseocr:$PYTHONPATH
+
+# 默认命令
+CMD ["python3", "app.py"]
